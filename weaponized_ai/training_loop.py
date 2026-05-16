@@ -447,3 +447,87 @@ def get_loop() -> TrainingLoop:
     if _loop is None:
         _loop = TrainingLoop()
     return _loop
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HighFidelityTrainingLoop — Native 60 Hz precision loop
+# ─────────────────────────────────────────────────────────────────────────────
+
+import numpy as np  # noqa: E402
+from concurrent.futures import ThreadPoolExecutor  # noqa: E402
+
+
+class HighFidelityTrainingLoop:
+    """
+    High-throughput RL execution loop targeting a strict 60 Hz tick rate.
+
+    Pipeline every frame:
+      1. Zero-copy state fetch from the C++ Shared Memory bridge
+      2. GPU tensor conversion + policy inference (torch.inference_mode)
+      3. Asynchronous input injection via a dedicated ThreadPoolExecutor
+      4. Precision sleep to maintain exact frame deadline alignment
+
+    Args:
+        agent:      Policy object exposing .policy(tensor) → (dist, value).
+        shm_reader: Object exposing .read_latest_state() → (ndarray|None, id).
+        controller: Object exposing .inject_inputs(action).
+        target_fps: Desired loop rate (default 60).
+    """
+
+    def __init__(self, agent, shm_reader, controller, target_fps: int = 60):
+        self.agent = agent
+        self.shm_reader = shm_reader
+        self.controller = controller
+        self.frame_time = 1.0 / target_fps
+        self.is_running = False
+
+        # Dedicated pool to offload I/O injection without blocking inference
+        self.io_executor = ThreadPoolExecutor(max_workers=1)
+
+    def start(self):
+        self.is_running = True
+        self._run_loop()
+
+    def stop(self):
+        self.is_running = False
+        self.io_executor.shutdown(wait=True)
+
+    def _run_loop(self):
+        import torch  # deferred to avoid forcing GPU init at module load
+        print(
+            f"[ENGINE] Initiating native {int(1.0 / self.frame_time)} Hz loop. "
+            f"Target delta: {self.frame_time:.5f}s"
+        )
+
+        while self.is_running:
+            loop_start = time.perf_counter()
+
+            # 1. Zero-copy fetch from Shared Memory bridge
+            state_vector, _tracking_id = self.shm_reader.read_latest_state()
+
+            if state_vector is None:
+                # Pacing fallback if SHM reader is not yet synchronised
+                time.sleep(0.001)
+                continue
+
+            # 2. Tensor conversion + inference
+            # torch.inference_mode() selects the optimal C++ backend path
+            with torch.inference_mode():
+                state_tensor = torch.from_numpy(state_vector).unsqueeze(0).cuda()
+                action_distribution, _value_pred = self.agent.policy(state_tensor)
+                action = action_distribution.sample().cpu().numpy()[0]
+
+            # 3. Asynchronous input injection — fire-and-forget
+            self.io_executor.submit(self.controller.inject_inputs, action)
+
+            # 4. Precision timing realignment
+            elapsed = time.perf_counter() - loop_start
+            sleep_time = self.frame_time - elapsed
+
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+            else:
+                print(
+                    f"[WARN] Frame deadline exceeded by "
+                    f"{-sleep_time * 1000:.2f}ms — inference lag detected."
+                )
