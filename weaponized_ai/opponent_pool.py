@@ -25,7 +25,9 @@ class OpponentPoolReservoir:
 
     def register_snapshot(self, model: torch.nn.Module, total_steps: int):
         """Saves a frozen copy of the current policy at snapshot_interval_steps boundaries."""
-        if total_steps % self.snapshot_interval_steps == 0:
+        # Guard against total_steps == 0 (Python's modulo returns 0 for any divisor)
+        # which would snapshot an untrained network at loop initialisation.
+        if total_steps > 0 and total_steps % self.snapshot_interval_steps == 0:
             snapshot_path = os.path.join(
                 self.weights_directory, f"striker_v_{total_steps}.pt"
             )

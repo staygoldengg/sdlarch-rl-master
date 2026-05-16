@@ -59,20 +59,24 @@ class CovariateShiftProtectedPPOLoss:
         surr2 = torch.clamp(ratios, 0.8, 1.2) * advantages
         ppo_loss = -torch.min(surr1, surr2).mean()
 
-        # 4. KL divergence: KL(ref || live)
-        # F.kl_div(log_input, target) computes target*(log(target) - log_input)
+        # 4. KL divergence: KL(live || ref)  [forward KL — anchoring direction]
+        # F.kl_div(log_input, target) computes KL(target || exp(log_input)).
+        # Swapping so target=live_probs gives KL(live || ref), which penalises
+        # the live policy placing mass where the reference has none — the correct
+        # direction for RLHF / DPO-style anchoring that prevents forgetting.
         live_probs = action_dist.probs
         ref_probs = ref_dist.probs
         kl_div = F.kl_div(
-            torch.log(live_probs + 1e-8),
-            ref_probs,
+            torch.log(ref_probs + 1e-8),
+            live_probs,
             reduction="batchmean",
         )
 
         # 5. Adaptive beta tuning (PID-style regulation)
+        # Clamped to [0.05, 5.0] to prevent runaway growth or collapse.
         if kl_div.item() > self.kl_target * 1.5:
-            self.kl_beta *= 1.1
+            self.kl_beta = min(5.0, self.kl_beta * 1.1)
         elif kl_div.item() < self.kl_target / 1.5:
-            self.kl_beta *= 0.9
+            self.kl_beta = max(0.05, self.kl_beta * 0.9)
 
         return ppo_loss + (self.kl_beta * kl_div)

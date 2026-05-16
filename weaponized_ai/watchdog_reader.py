@@ -53,6 +53,13 @@ class TelemetryWatchdogMemoryReader:
         if len(raw_buffer_bytes) < self._MIN_BUFFER_SIZE:
             return self._fallback(), False
 
+        # Heuristic 0: Sentinel checksum — written by shm_bridge.cpp at byte 0.
+        # If this does not match, the bridge has not finished its first write yet.
+        import struct
+        sentinel = struct.unpack_from('<Q', raw_buffer_bytes, 0)[0]
+        if sentinel != 0xDEADC0DEFA57FEED:
+            return self._fallback(), False
+
         # Unpack floats from player_x offset onwards
         extracted_floats = np.frombuffer(raw_buffer_bytes[12:236], dtype=np.float32)
 

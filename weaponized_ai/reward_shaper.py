@@ -48,10 +48,14 @@ class AlignedRewardShaper:
             spatial_potential -= (1000.0 / (danger_delta + 1.0)) * 0.05
 
         # 3. Compute Formal Potential-Based Delta
+        # Correct PBRS formula: gamma * Phi(s') - Phi(s)
+        # Omitting gamma causes a small non-zero bias at episode boundaries
+        # that inflates reward for being near the start-of-episode position.
+        _GAMMA = 0.99
         if self.prev_potential is None:
             self.prev_potential = spatial_potential
 
-        pbrs_delta = spatial_potential - self.prev_potential
+        pbrs_delta = _GAMMA * spatial_potential - self.prev_potential
         self.prev_potential = spatial_potential
 
         # 4. Integrate Non-Linear Punishment/Reward Balancing (Anti-Suicide Shaping)
