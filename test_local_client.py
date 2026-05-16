@@ -288,17 +288,16 @@ def test_rl_train_pass():
 def test_reward_shaper():
     from weaponized_ai.reward_shaper import AlignedRewardShaper
     shaper = AlignedRewardShaper()
-    s  = {"x": 0.0, "y": 0.0, "stocks_p1": 3, "stocks_p2": 3}
-    sp = {"x": 50.0, "y": 0.0, "stocks_p1": 3, "stocks_p2": 3}
-    r = shaper.compute(
-        raw_reward=5.0,
-        state=s,
-        next_state=sp,
-        combo_hit=True,
-        stock_lost=False,
-    )
-    assert isinstance(r, float), f"Expected float, got {type(r)}"
-    return f"shaped_reward={r:.4f}"
+    state = {
+        "player_x": 50.0, "player_y": 0.0,
+        "opponent_x": -50.0, "opponent_y": 0.0,
+        "player_damage": 60.0, "opponent_damage": 30.0,
+        "player_stocks": 3, "opponent_stocks": 3,
+        "event_player_died": False, "event_combo_connected": True,
+    }
+    r = shaper.calculate_step_reward(state_dict=state, raw_env_reward=5.0)
+    assert isinstance(r, (int, float)), f"Expected numeric, got {type(r)}"
+    return f"shaped_reward={float(r):.4f}"
 
 
 # ── Runner ────────────────────────────────────────────────────────────────────
