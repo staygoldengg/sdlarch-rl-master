@@ -510,6 +510,15 @@ class HighFidelityTrainingLoop:
                 time.sleep(0.001)
                 continue
 
+            # 1b. Zero-state safety lock — skip inference on loading/corrupted frames
+            if np.sum(np.abs(state_vector)) == 0.0:
+                try:
+                    self.controller.global_flush()
+                except AttributeError:
+                    pass
+                time.sleep(0.1)
+                continue
+
             # 2. Tensor conversion + inference
             # torch.inference_mode() selects the optimal C++ backend path
             with torch.inference_mode():
