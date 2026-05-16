@@ -57,5 +57,10 @@ secrets.json
 *.pem
 *.key
 
+# ── PyInstaller build artifacts ───────────────────────────────────────────────
+build/
+dist/
+*.spec.bak
+
 # ── Tool outputs ──────────────────────────────────────────────────────────────
 tools/input_replay/input_log.txt

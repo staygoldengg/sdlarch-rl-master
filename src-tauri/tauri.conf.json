@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "AI Macro Suite",
+  "productName": "Striker The Enlightened",
   "version": "1.0.0",
-  "identifier": "com.aimacrosuite.app",
+  "identifier": "com.striker.enlightened",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:4321",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "AI Macro Suite",
+        "title": "Striker — The Enlightened",
         "width": 1100,
         "height": 700,
         "resizable": true,
@@ -26,6 +26,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": [
+      "../dist/striker-server/**/*"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
